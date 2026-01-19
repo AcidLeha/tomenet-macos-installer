@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # shellcheck disable=SC2166
-VERSION='4.9.1'
+VERSION='4.9.3'
 
-TARGET_DIR=~/Desktop/TomeNET.app
+TARGET_DIR="$HOME/Desktop/TomeNET $VERSION.app"
+
 RELEASE="tomenet-$VERSION"
 LIBS_REQUIRED='flac fluid-synth gettext glib lame libmodplug libogg libsndfile libvorbis libxmp mpg123 openssl@3 opus opusfile pcre2 portaudio readline sdl2 sdl2_mixer sdl2_sound' # libmikmod libgcrypt
 TOMENET_URL="https://www.tomenet.eu/downloads/$RELEASE.tar.bz2"
@@ -21,61 +22,109 @@ NORMAL=$(printf "\033[0m")
 INFO_PLIST="<?xml version=\"1.0\" encoding=\"UTF-8\"?>
 <!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">
 <plist version=\"1.0\">
-	<dict>
-		<key>CFBundleExecutable</key>
-		<string>run.sh</string>
-		<key>CFBundleIconFile</key>
-		<string>icon.icns</string>
-		<key>CFBundleInfoDictionaryVersion</key>
-		<string>$VERSION</string>
-		<key>CFBundlePackageType</key>
-		<string>APPL</string>
-		<key>CFBundleSignature</key>
-		<string></string>
-		<key>CFBundleVersion</key>
-		<string>$VERSION</string>
-	</dict>
+  <dict>
+    <key>CFBundleExecutable</key>
+    <string>run.sh</string>
+
+    <key>CFBundleIconFile</key>
+    <string>icon.icns</string>
+
+    <key>CFBundleName</key>
+    <string>TomeNET $VERSION</string>
+
+    <key>CFBundleDisplayName</key>
+    <string>TomeNET $VERSION</string>
+
+    <key>CFBundleIdentifier</key>
+    <string>eu.tomenet.client.$VERSION</string>
+
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+
+    <key>CFBundleShortVersionString</key>
+    <string>$VERSION</string>
+
+    <key>CFBundleVersion</key>
+    <string>$VERSION</string>
+  </dict>
 </plist>"
+
 
 # shellcheck disable=SC2016
 RUN_SH='#!/usr/bin/env bash
-export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/opt/X11/bin
+set -euo pipefail
 
-type Xquartz > /dev/null 2>&1 || {
- osascript -e "display dialog \"Need Xquartz\" with icon caution buttons {\"Ok\"}"
- open "https://www.xquartz.org"
- exit
-}
+export PATH="/opt/homebrew/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/opt/X11/bin"
+
+# Check XQuartz presence
+if [ ! -x /opt/X11/bin/xset ]; then
+  osascript -e '"'"'display dialog "Need XQuartz (X11) to run TomeNET." with icon caution buttons {"Ok"}'"'"'
+  open "https://www.xquartz.org"
+  exit 1
+fi
+
+# Start XQuartz
+open -ga XQuartz || true
+sleep 2
+
+# Ensure DISPLAY
+export DISPLAY="${DISPLAY:-localhost:0}"
 
 SOURCE="${BASH_SOURCE[0]}"
 while [ -h "$SOURCE" ]; do
-	DIR="$( cd -P "$( dirname "$SOURCE" )" >/dev/null 2>&1 && pwd )"
-	SOURCE="$(readlink "$SOURCE")"
-	[[ $SOURCE != /* ]] && SOURCE="$DIR/$SOURCE"
+  DIR="$( cd -P "$( dirname "$SOURCE" )" >/dev/null 2>&1 && pwd )"
+  SOURCE="$(readlink "$SOURCE")"
+  [[ $SOURCE != /* ]] && SOURCE="$DIR/$SOURCE"
 done
 DIR="$( cd -P "$( dirname "$SOURCE" )" >/dev/null 2>&1 && pwd )"
 
-RC=~/.tomenetrc
-[ -e $RC ] || cp "$DIR/.tomenetrc" ~/
+# Versioned writable lib dir (avoid writing inside .app bundle)
+LIB_DIR="$HOME/Library/Application Support/TomeNET/lib'"$VERSION"'"
+mkdir -p "$LIB_DIR"
 
-grep -q "^##not first time$" $RC || {
-  echo "##not first time" >> $RC && \
+# If user lib is missing (fresh install), try to seed it from app bundle lib
+# (But normally the installer should have populated LIB_DIR already.)
+if [ ! -f "$LIB_DIR/tomenet.ini" ] && [ ! -d "$LIB_DIR/xtra" ]; then
+  if [ -d "$DIR/lib" ]; then
+    cp -a "$DIR/lib/." "$LIB_DIR/" 2>/dev/null || true
+  fi
+fi
+
+# If still missing, show an error (otherwise game will fail to run correctly)
+if [ ! -f "$LIB_DIR/tomenet.ini" ] && [ ! -d "$LIB_DIR/xtra" ]; then
+  osascript -e "display dialog \"TomeNET data directory is missing.\\n\\nExpected: $LIB_DIR\\n\\nReinstall or copy lib data there.\" with icon stop buttons {\"Ok\"}"
+  open "$HOME/Library/Application Support/TomeNET" || true
+  exit 1
+fi
+
+# Keep rc in home as before
+RC="$HOME/.tomenetrc"
+[ -e "$RC" ] || cp "$DIR/.tomenetrc" "$HOME/"
+
+grep -q "^##not first time$" "$RC" || {
+  echo "##not first time" >> "$RC" && \
   osascript -e "display dialog \"Do you prefer graphical-style font?
 You can always change this later in the games options.\" with title \"TomeNET first start question\" \
 buttons {\"Yes\", \"No\"} default button \"Yes\" cancel button \"No\" \
 with icon POSIX file \"$DIR/../Resources/icon.icns\"" > /dev/null 2>&1 && {
-    sed -i -e "s/^Mainwindow_Font.*$/Mainwindow_Font 14x20tg/" $RC
+     sed -i -e "s/^Mainwindow_Font.*$/Mainwindow_Font 14x20tg/" $RC
   }
 }
 
-xset fp+ "$DIR/fonts"
-xset fp rehash
+# X11 font path (only if X server reachable)
+if /opt/X11/bin/xdpyinfo >/dev/null 2>&1; then
+  xset fp+ "$DIR/fonts" || true
+  xset fp rehash || true
+fi
 
-cd $DIR || exit
-_arch="$(arch)"
-export DYLD_LIBRARY_PATH="./$_arch"
-./tomenet-$_arch &
+# Run from LIB_DIR so any relative writes go to a writable place
+cd "$LIB_DIR" || exit 1
+
+_arch="$(uname -m)"
+export DYLD_LIBRARY_PATH="$DIR/$_arch"
+exec "$DIR/tomenet-$_arch" -P"$LIB_DIR"
 '
+
 
 download(){
 	_url=$1
@@ -149,8 +198,8 @@ check_req_pkg() {
 	return 0
 }
 
-mkdir -p $TARGET_DIR
-cd $TARGET_DIR || fail "can't 'cd $TARGET_DIR'"
+mkdir -p "$TARGET_DIR"
+cd "$TARGET_DIR" || fail "can't 'cd $TARGET_DIR'"
 
 type brew &>/dev/null || {
   echo 'Homebrew not installed'
@@ -177,8 +226,23 @@ sed -i -e 's/sdl-config/sdl2-config/g' makefile.osx
 sed -i -e 's/-lSDL\_mixer/-lSDL2\_mixer/g' makefile.osx
 make -f makefile.osx tomenet || fail "build error"
 echo "Buid complete!"
-cd $TARGET_DIR || fail "can't 'cd $TARGET_DIR'"
+cd "$TARGET_DIR" || fail "can't 'cd $TARGET_DIR'"
 mkdir -p {Contents/MacOS,Contents/Resources}
+
+# Ask before removing old lib directory (if exists)
+USER_LIB="$HOME/Library/Application Support/TomeNET/lib$VERSION"
+if [ -d "$USER_LIB" ]; then
+  echo "Existing user lib directory found:"
+  echo "  $USER_LIB"
+  Yn "Delete existing user lib for version $VERSION?" && {
+    rm -rf "$USER_LIB"
+    echo "User lib removed."
+  } || {
+    echo "Keeping existing user lib directory."
+  }
+fi
+
+
 mv $RELEASE/{lib,TomeNET-Guide*,.tomenetrc,tomenet.ini.default} ./Contents/MacOS/
 mv $RELEASE/src/tomenet "./Contents/MacOS/tomenet-$ARCH"
 strip "./Contents/MacOS/tomenet-$ARCH"
@@ -242,6 +306,33 @@ Yn "brew remove 7zip" && brew remove 7zip
 	endwait "$DONE"
 # }
 
+# Install versioned lib into user's Application Support (so click-launch works immediately)
+USER_LIB="$HOME/Library/Application Support/TomeNET/lib$VERSION"
+
+if [ -d "./Contents/MacOS/lib" ]; then
+  echo "Installing lib to: $USER_LIB"
+  mkdir -p "$USER_LIB"
+  # Copy only if empty or user agrees
+  if [ "$(ls -A "$USER_LIB" 2>/dev/null | wc -l | tr -d " ")" != "0" ]; then
+    echo "User lib directory is not empty:"
+    echo "  $USER_LIB"
+    Yn "Overwrite existing user lib for version $VERSION?" && {
+      rm -rf "$USER_LIB"
+      mkdir -p "$USER_LIB"
+      cp -a "./Contents/MacOS/lib/." "$USER_LIB/"
+      echo "User lib overwritten."
+    } || {
+      echo "Keeping existing user lib."
+    }
+  else
+    cp -a "./Contents/MacOS/lib/." "$USER_LIB/"
+    echo "User lib installed."
+  fi
+else
+  echo "WARNING: ./Contents/MacOS/lib not found, cannot seed user lib."
+fi
+
+
 DONE="Done"
 startwait "Make TomeNET original icon for MacOS app..."
 	download $ICON_URL icon.png || DONE="${RED}Error${NORMAL}"
@@ -268,6 +359,6 @@ printf "%s" "$INFO_PLIST" > ./Contents/Info.plist
 
 echo "Complete!"
 echo "Now you can open $TARGET_DIR (XQuartz is required)"
-Yn "Open $TARGET_DIR now?" && open $TARGET_DIR
+Yn "Open $TARGET_DIR now?" && open "$TARGET_DIR"
 
 exit 0
