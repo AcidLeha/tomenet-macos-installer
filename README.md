@@ -8,7 +8,7 @@ Build [TomeNET](https://tomenet.eu) native application for MacOS
 ### Install
 Just run in terminal:
 ```
-/bin/bash -c "$(curl -fsSL https://github.com/vasyahacker/tomenet-macos-installer/raw/main/tomenet-macos-installer.sh)"
+/bin/bash -c "$(curl -fsSL https://github.com/AcidLeha/tomenet-macos-installer/raw/main/tomenet-macos-installer.sh)"
 ```
 Then follow the instructions and TomeNET.app will appear on your desktop
 
@@ -17,9 +17,7 @@ Then follow the instructions and TomeNET.app will appear on your desktop
 ![icon, version, size](https://github.com/vasyahacker/tomenet-macos-installer/raw/main/scrn/scr.png "main window")
 
 ### Tested
-- MacOS 13.1 Intel
-- MacOS 13.1 M1
-- MacOS 13.1 M1 Max
+- MacOS 26.1 M4 PRO
 
 If you get a message: "The application "TomeNET" cannot be opened." try:
 ```bash
