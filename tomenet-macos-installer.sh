@@ -5,7 +5,7 @@ VERSION='4.9.3'
 TARGET_DIR="$HOME/Desktop/TomeNET $VERSION.app"
 
 RELEASE="tomenet-$VERSION"
-LIBS_REQUIRED='flac fluid-synth gettext glib lame libmodplug libogg libsndfile libvorbis libxmp mpg123 openssl@3 opus opusfile pcre2 portaudio readline sdl2 sdl2_mixer sdl2_sound' # libmikmod libgcrypt
+LIBS_REQUIRED='flac fluid-synth gettext glib lame libmodplug libogg libsndfile libvorbis libxmp mpg123 openssl@3 opus opusfile pcre2 portaudio readline sdl2 sdl2_mixer sdl2_sound sdl3' # libmikmod libgcrypt
 TOMENET_URL="https://www.tomenet.eu/downloads/$RELEASE.tar.bz2"
 ICON_URL='https://tomenet.eu/downloads/tomenet4.png'
 
@@ -68,7 +68,9 @@ open -ga XQuartz || true
 sleep 2
 
 # Ensure DISPLAY
-export DISPLAY="${DISPLAY:-localhost:0}"
+# The Apple default way that uses launchd does not get detected properly so
+# go old school instead
+export DISPLAY="localhost:0"
 
 SOURCE="${BASH_SOURCE[0]}"
 while [ -h "$SOURCE" ]; do
@@ -120,7 +122,7 @@ fi
 # Run from LIB_DIR so any relative writes go to a writable place
 cd "$LIB_DIR" || exit 1
 
-_arch="$(uname -m)"
+_arch="$(arch)"
 export DYLD_LIBRARY_PATH="$DIR/$_arch"
 exec "$DIR/tomenet-$_arch" -P"$LIB_DIR"
 '
